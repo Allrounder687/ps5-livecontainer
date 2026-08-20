@@ -1,4 +1,4 @@
-PS5_HOST ?= ps5
+PS5_HOST ?= 192.168.0.208
 PS5_PORT ?= 9021
 
 ifdef PS5_PAYLOAD_SDK
@@ -8,11 +8,11 @@ else
 endif
 
 TARGET := ps5_livecontainer.elf
-SRCS := src/main.c
+SRCS := src/main.c src/elf_loader.c src/signal_guard.c src/vfs_sandbox.c src/http_server.c src/ps5_notify.c src/video_out.c
 OBJS := $(SRCS:.c=.o)
 
-CFLAGS := -Wall -Wextra -Iinclude -D_BSD_SOURCE
-LIBS := -lkernel_sys -lkernel -lSceSystemService
+CFLAGS := -Wall -Wextra -Iinclude -D_BSD_SOURCE -pthread
+LIBS := -lkernel_sys -lkernel -lSceSystemService -lSceNet -lpthread
 
 all: $(TARGET) payloads
 
@@ -32,4 +32,4 @@ clean:
 	$(MAKE) -C tools/notify clean
 
 deploy: $(TARGET)
-	$(PS5_DEPLOY) -h $(PS5_HOST) -p $(PS5_PORT) $(TARGET)
+	python scripts/deploy_payload.py
