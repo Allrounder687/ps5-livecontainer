@@ -1,73 +1,40 @@
-#include <unistd.h>
-#include <fcntl.h>
+#include <stdint.h>
+#include <stddef.h>
 
-// Direct entry point invoked by elfldr
-// elfldr sets RIP to ehdr.e_entry and passes payload_args in RDI
-void _start(void *args) {
-    (void)args;
+typedef struct payload_args {
+    int (*sys_dynlib_dlsym)(int, const char*, void*);
+    int  *rwpipe;
+    int  *rwpair;
+    long  kpipe_addr;
+    long  kdata_base_addr;
+    int  *payloadout;
+} payload_args_t;
 
-    // Use direct FreeBSD/PS5 syscalls
-    // syscall 5 is sys_open(path, flags, mode)
-    // syscall 4 is sys_write(fd, buf, nbytes)
-    // syscall 6 is sys_close(fd)
-    
-    // We can do direct inline asm syscalls on FreeBSD/PS5 x86_64:
-    // PS5 syscall convention: RAX = syscall_num, RDI = arg1, RSI = arg2, RDX = arg3, R10 = arg4, R8 = arg5, R9 = arg6
-    
-    const char path[] = "/data/raw_payload_test.log";
-    const char msg[] = "====================================\n"
-                       "[+] DIRECT _START EXECUTION SUCCESS!\n"
-                       "[+] Bypassed SDK crt1.o completely!\n"
-                       "====================================\n";
-    
-    long fd = -1;
-    
-    // sys_open("/data/raw_payload_test.log", O_CREAT|O_WRONLY|O_TRUNC = 0x601, 0777)
-    // In FreeBSD: O_CREAT=0x0200, O_WRONLY=0x0001, O_TRUNC=0x0400 -> 0x0601
-    asm volatile(
-        "mov $5, %%rax\n"          // SYS_open = 5
-        "mov %1, %%rdi\n"          // path
-        "mov $0x601, %%rsi\n"      // O_CREAT | O_WRONLY | O_TRUNC
-        "mov $0777, %%rdx\n"       // mode
-        "syscall\n"
-        "mov %%rax, %0\n"
-        : "=r"(fd)
-        : "r"(path)
-        : "rax", "rdi", "rsi", "rdx", "rcx", "r11", "memory"
-    );
-    
-    if (fd >= 0) {
-        long written = 0;
-        asm volatile(
-            "mov $4, %%rax\n"      // SYS_write = 4
-            "mov %1, %%rdi\n"      // fd
-            "mov %2, %%rsi\n"      // buf
-            "mov %3, %%rdx\n"      // len
-            "syscall\n"
-            "mov %%rax, %0\n"
-            : "=r"(written)
-            : "r"(fd), "r"(msg), "r"((long)sizeof(msg) - 1)
-            : "rax", "rdi", "rsi", "rdx", "rcx", "r11", "memory"
-        );
-        
-        asm volatile(
-            "mov $6, %%rax\n"      // SYS_close = 6
-            "mov %0, %%rdi\n"
-            "syscall\n"
-            :
-            : "r"(fd)
-            : "rax", "rdi", "rcx", "r11", "memory"
-        );
+payload_args_t *g_payload_args = NULL;
+
+extern int main(int argc, char **argv);
+
+/* Universal entry point for LiveContainer under elfldr */
+void _start(payload_args_t *args) {
+    g_payload_args = args;
+
+    /* Call LiveContainer master daemon main */
+    int ret = main(0, NULL);
+
+    if (args && args->payloadout) {
+        *args->payloadout = ret;
     }
-    
-    // sys_nanosleep / pause or return
-    // sys_exit(0) = 1
-    asm volatile(
-        "mov $1, %%rax\n"
-        "xor %%rdi, %%rdi\n"
-        "syscall\n"
-        :
-        :
-        : "rax", "rdi", "rcx", "r11"
-    );
+
+    /* sys_exit(ret) using libkernel syscall gadget if available */
+    if (args && args->sys_dynlib_dlsym) {
+        void (*exit_fn)(int) = NULL;
+        if (args->sys_dynlib_dlsym(0x2, "exit", (void**)&exit_fn) == 0 && exit_fn) {
+            exit_fn(ret);
+        }
+    }
+
+    while (1) {
+        /* Infinite keepalive */
+        asm volatile("pause");
+    }
 }

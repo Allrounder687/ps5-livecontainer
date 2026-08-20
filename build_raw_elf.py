@@ -1,6 +1,6 @@
 import struct
 
-def make_elf():
+def make_elf(out_path="bare_payload.elf"):
     msg = b"========================================\n" \
           b"[+] PS5 DIRECT CODE EXECUTION CONFIRMED!\n" \
           b"[+] Running natively via elfldr on PS5!\n" \
@@ -113,9 +113,11 @@ def make_elf():
     struct.pack_into('<Q', buf, sh_off + 64 + 48, 1)  # sh_addralign
     struct.pack_into('<Q', buf, sh_off + 64 + 56, 0)  # sh_entsize
 
+    if out_path:
+        with open(out_path, "wb") as f:
+            f.write(buf)
     return bytes(buf)
 
-elf_bytes = make_elf()
-with open("bare_payload.elf", "wb") as f:
-    f.write(elf_bytes)
-print(f"[+] Fixed bare_payload.elf generated ({len(elf_bytes)} bytes)")
+if __name__ == "__main__":
+    make_elf()
+    print("[+] Generated bare_payload.elf (4096 bytes)")
