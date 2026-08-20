@@ -1,0 +1,14 @@
+# Build artifacts
+*.o
+*.elf
+*.fself
+*.bin
+*.dat
+dist/
+build/
+__pycache__/
+*.pyc
+
+# Temporary research directories
+ps5-payload-elfldr/
+ps5-payload-sdk-src/

